@@ -86,6 +86,13 @@ def forward(iteration, smoke, vx, vy, output):
     return smoke
 
 
+def reshape_for_mobilenet(target):
+    target_activations = target[None, :, :]
+    target_activations = torch.cat((target_activations, target_activations, target_activations), 0)
+    target_activations = target_activations[None, :, :, :]
+    return target_activations
+
+
 def main(learning_rate):
     os.system("mkdir -p output_pytorch")
     print("Loading initial and target states...")
@@ -101,10 +108,7 @@ def main(learning_rate):
     target = torch.tensor(target_img, device=device, dtype=torch.float32)
 
     mobilenet = models.mobilenet_v2(pretrained=True)
-
-    target_activations = target[None, :, :]
-    target_activations = torch.cat((target_activations, target_activations, target_activations), 0)
-    target_activations = target_activations[None, :, :, :]
+    target_activations = reshape_for_mobilenet(target)
 
     for param in mobilenet.parameters():
         param.requires_grad = False
@@ -119,12 +123,13 @@ def main(learning_rate):
         learning_rate *= lr_decay
         t = time.time()
         smoke = forward(opt, initial_smoke, vx, vy, opt == (num_iterations - 1))
-        smoke_activations = smoke[None, :, :]
-        smoke_activations = torch.cat((smoke_activations, smoke_activations, smoke_activations), 0)
-        smoke_activations = smoke_activations[None, :, :, :]
+
+        smoke_activations = reshape_for_mobilenet(smoke)
         smoke_activations = [smoke_activations]
+
         for l in modulelist[:2]:
             smoke_activations.append(l(smoke_activations[-1]))
+
         loss = ((smoke - target) ** 2).mean()
         loss += ((smoke_activations[0] - target_activations[0]) ** 2).mean() * 0.1
         loss += ((smoke_activations[1] - target_activations[1]) ** 2).mean() * 0.1
