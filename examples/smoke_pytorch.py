@@ -5,6 +5,7 @@ import os
 import time
 
 import matplotlib
+import matplotlib.pyplot as plt
 import torch
 # from torch import nn
 import torchvision.models as models
