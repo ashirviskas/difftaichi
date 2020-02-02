@@ -8,7 +8,7 @@ from imageio import imread, imwrite
 real = ti.f32
 ti.set_default_fp(real)
 
-num_iterations = 50
+num_iterations = 105
 n_grid = 110
 dx = 1.0 / n_grid
 num_iterations_gauss_seidel = 6
@@ -182,8 +182,8 @@ def forward(output=None):
 
 def main():
   print("Loading initial and target states...")
-  initial_smoke_img = imread("init_smoke.png")[:, :, 0] / 255.0
-  target_img = imread("peace.png")[::2, ::2, 3] / 255.0
+  initial_smoke_img = imread("hero.png")[:, :, 0] / 255.0
+  target_img = imread("zyro.png")[:, :] / 255.0
 
   for i in range(n_grid):
     for j in range(n_grid):

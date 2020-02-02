@@ -10,16 +10,18 @@ import matplotlib
 import matplotlib.pyplot as plt
 import pdb
 from imageio import imread, imwrite
-from torch import nn
+# from torch import nn
+import torchvision.models as models
 
 device = torch.device("cuda") if torch.cuda.is_available() else torch.device(
     "cpu")
 
-num_iterations = 50
+num_iterations = 105
 n_grid = 110
 dx = 1.0 / n_grid
 steps = 100
-learning_rate = 100
+learning_rate = 165
+lr_decay = 0.985
 
 
 def roll_col(t, n):
@@ -82,16 +84,16 @@ def forward(iteration, smoke, vx, vy, output):
 
     if output:
       matplotlib.image.imsave("output_pytorch/step{0:03d}.png".format(t),
-                              255 * smoke.cpu().detach().numpy())
+                              255 * smoke.cpu().detach().numpy(), cmap='gray')
 
   return smoke
 
 
-def main():
+def main(learning_rate):
   os.system("mkdir -p output_pytorch")
   print("Loading initial and target states...")
-  initial_smoke_img = imread("init_smoke.png")[:, :, 0] / 255.0
-  target_img = imread("peace.png")[::2, ::2, 3] / 255.0
+  initial_smoke_img = imread("init_smoke_2.png")[:, :, 0] / 255.0
+  target_img = imread("keksas.png")[:, :] / 255.0
 
   vx = torch.zeros(
       n_grid, n_grid, requires_grad=True, device=device, dtype=torch.float32)
@@ -101,16 +103,45 @@ def main():
       initial_smoke_img, device=device, dtype=torch.float32)
   target = torch.tensor(target_img, device=device, dtype=torch.float32)
 
+  mobilenet = models.mobilenet_v2(pretrained=True)
+
+  target_activations = target[None, :, :]
+  target_activations = torch.cat((target_activations, target_activations, target_activations), 0)
+  target_activations = target_activations[None, :, :, :]
+
+  for param in mobilenet.parameters():
+    param.requires_grad = False
+
+  modulelist = list(mobilenet.features.modules())[0]
+  target_activations = [target_activations]
+  for l in modulelist[:2]:
+    print(l)
+    target_activations.append(l(target_activations[-1]))
+
   for opt in range(num_iterations):
+    learning_rate *= lr_decay
     t = time.time()
     smoke = forward(opt, initial_smoke, vx, vy, opt == (num_iterations - 1))
+    smoke_activations = smoke[None, :, :]
+    smoke_activations = torch.cat((smoke_activations, smoke_activations, smoke_activations), 0)
+    smoke_activations = smoke_activations[None, :, :, :]
+    smoke_activations = [smoke_activations]
+    for l in modulelist[:2]:
+      smoke_activations.append(l(smoke_activations[-1]))
     loss = ((smoke - target)**2).mean()
+    loss += ((smoke_activations[0] - target_activations[0])**2).mean() * 0.1
+    loss += ((smoke_activations[1] - target_activations[1])**2).mean() * 0.1
+
+
+
+
     print('forward time', (time.time() - t) * 1000, 'ms')
 
     t = time.time()
     loss.backward()
     print('backward time', (time.time() - t) * 1000, 'ms')
-
+    # learning_rate = learning_rate * 0.98
+    print(learning_rate)
     with torch.no_grad():
       vx -= learning_rate * vx.grad.data
       vy -= learning_rate * vy.grad.data
@@ -121,4 +152,4 @@ def main():
 
 
 if __name__ == '__main__':
-  main()
+  main(learning_rate)
